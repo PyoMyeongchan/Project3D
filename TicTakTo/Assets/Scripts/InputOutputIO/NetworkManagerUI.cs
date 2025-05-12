@@ -17,13 +17,4 @@ public class NetworkManagerUI : MonoBehaviour
 
     }
 
-    void Start()
-    {
-        
-    }
-
-    void Update()
-    {
-        
-    }
 }
