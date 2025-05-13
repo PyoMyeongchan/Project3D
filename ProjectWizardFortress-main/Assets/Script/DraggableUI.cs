@@ -1,30 +1,42 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using System.Collections.Generic;
+using UnityEngine.UI;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
+[RequireComponent(typeof(RectTransform), typeof(CanvasGroup))]
 public class DraggableUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
-    private Transform canvas;
+    [Header("이 UI가 드롭될 때 교체될 프리팹")]
+    [SerializeField] private GameObject replacementPrefab;
+    public GameObject ReplacementPrefab => replacementPrefab;
+
     private Transform previousParent;
     private RectTransform rect;
     private CanvasGroup canvasGroup;
-    
+    private Image dragPanel;
     private Vector2 originalPosition;
 
     private void Awake()
     {
-        canvas      = FindAnyObjectByType<Canvas>().transform;
-        // 캔버스가 하나일때 가능한 코드 캔버스가 많아 진다면 UI 매니저를 만들어 따로 설정해야 한다
- 
-        rect        = GetComponent<RectTransform>();
-        canvasGroup = GetComponent<CanvasGroup>();
-    }
+        dragPanel = GameObject.Find("DragPanel")?.GetComponent<Image>();
+        if (dragPanel == null)
+        {
+            Debug.LogError("dragPanel를 찾을 수 없습니다. 'dragPanel'라는 이름의 Canvas를 하나 만들어주세요.");
+        }
 
+        rect = GetComponent<RectTransform>();
+        canvasGroup = GetComponent<CanvasGroup>();
+        
+    }
+    
+    
     public void OnBeginDrag(PointerEventData eventData)
     {
         previousParent = transform.parent;
         originalPosition = rect.anchoredPosition;
 
-        transform.SetParent(canvas);
+        transform.SetParent(dragPanel.transform, false);
         transform.SetAsLastSibling();
 
         canvasGroup.alpha = 0.6f;
@@ -33,18 +45,36 @@ public class DraggableUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
 
     public void OnDrag(PointerEventData eventData)
     {
-        rect.position = eventData.position;
-        
+        RectTransformUtility.ScreenPointToLocalPointInRectangle
+        (
+            dragPanel.transform as RectTransform,
+            eventData.position,
+            eventData.pressEventCamera,
+            out Vector2 localPos
+        );
+        rect.localPosition = localPos;
         
     }
-
+    
     public void OnEndDrag(PointerEventData eventData)
     {
-        if(transform.parent == canvas)
+        // DropZone 탐색
+        List<RaycastResult> results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(eventData, results);
+
+        foreach (var result in results)
         {
-            transform.SetParent(previousParent);
-            rect.anchoredPosition = originalPosition;
+            var dropZone = result.gameObject.GetComponent<DragZone>();
+            if (dropZone != null)
+            {
+                dropZone.OnDrop(eventData);
+                return; // 드롭 성공 시 종료
+            }
         }
+
+        // 실패 시 원위치로 복귀
+        transform.SetParent(previousParent, false);
+        rect.anchoredPosition = originalPosition;
 
         canvasGroup.alpha = 1.0f;
         canvasGroup.blocksRaycasts = true;
